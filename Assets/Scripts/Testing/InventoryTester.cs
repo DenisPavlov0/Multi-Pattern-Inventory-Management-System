@@ -1,104 +1,125 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using UnityEngine;
-using UnityEngine.UI;
-using Random = UnityEngine.Random;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Linq;
+    using UnityEngine;
+    using UnityEngine.UI;
+    using Random = UnityEngine.Random;
 
-public class InventoryTester : MonoBehaviour
-{
-    
-    [SerializeField] private ItemData[] swords; 
-    [SerializeField] private ItemData[] rings;
-    [SerializeField] private ItemData[] eats;
-
-    [SerializeField] private Button sortByName;
-    [SerializeField] private Button sortByCategory;
-    [SerializeField] private Button sortByNameLength;
-    
-    private ItemFactory _itemFactory;
-
-    private void Start()
+    public class InventoryTester : MonoBehaviour
     {
-        _itemFactory = new ItemFactory();
-        sortByName.onClick.AddListener(SortByName);
-        sortByCategory.onClick.AddListener(SortByCategory);
-        sortByNameLength.onClick.AddListener(SortByNameLength);
-    }
+        [SerializeField] private ItemData[] swords; 
+        [SerializeField] private ItemData[] rings;
+        [SerializeField] private ItemData[] eats;
 
-    private void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.Alpha1))
+        [SerializeField] private Button sortByName;
+        [SerializeField] private Button sortByCategory;
+        [SerializeField] private Button sortByNameLength;
+        [SerializeField] private Button undoButton;
+        
+        [SerializeField] private Button addSword;
+        [SerializeField] private Button addEat;
+        [SerializeField] private Button addRing;
+        [SerializeField] private Button removeLast;
+        
+
+        private ItemFactory _itemFactory;
+        private CommandManager _commandManager;
+
+        private void Start()
         {
-            AddItem(GetRandomItem(swords));
-        }
-        if (Input.GetKeyDown(KeyCode.Alpha2))
-        {
-            AddItem(GetRandomItem(rings));
-        }
-        if (Input.GetKeyDown(KeyCode.Alpha3))
-        {
-            AddItem(GetRandomItem(eats));
-        }
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            RemoveItem();
+            _itemFactory = new ItemFactory();
+            _commandManager = new CommandManager();
+
+            sortByName.onClick.AddListener(SortByName);
+            sortByCategory.onClick.AddListener(SortByCategory);
+            sortByNameLength.onClick.AddListener(SortByNameLength);
+            undoButton.onClick.AddListener(UndoLastAction);
+            removeLast.onClick.AddListener(RemoveLastItem);
+            
+            addSword.onClick.AddListener(() => AddItem(swords));
+            addEat.onClick.AddListener(() => AddItem(eats));
+            addRing.onClick.AddListener(() => AddItem(rings));
         }
         
-    }
-    private void AddItem(ItemData itemData)
-    {
-        if (InventoryManager.Instance.GetRemainingSpace() <= 0)
+
+        private void AddItem(ItemData[] item)
         {
-            Debug.Log("Inventory is full! Cannot add new items.");
-            return;
-        }
-        var newItem = _itemFactory.CreateItem(itemData); // Создаём предмет только если есть место
-        InventoryManager.Instance.AddItem(newItem);
-    }
-    private void RemoveItem()
-    {
-        var itemList = InventoryManager.Instance.GetItems();
-        if (itemList.Count == 0)
-        {
-            Debug.LogWarning("Inventory is empty. Cannot remove item.");
-            return;
+            ExecuteAddItemCommand(GetRandomItem(item));
         }
 
-        var lastItem = itemList.Last();
-        InventoryManager.Instance.RemoveItem(lastItem);
-    }
-    private void TestSorting(ISortStrategy sortStrategy)
-    {
-        List<Item> sortedItems = sortStrategy.Sort(InventoryManager.Instance.GetItems());
-        Debug.Log($"Sorted items using {sortStrategy.GetType().Name}:");
-        InventoryManager.Instance.ReplaceItems(sortedItems);
-    }
+        private void RemoveLastItem()
+        {
+            ExecuteRemoveItemCommand();
+        }
+        private void ExecuteAddItemCommand(ItemData itemData)
+        {
+            if (InventoryManager.Instance.GetRemainingSpace() <= 0)
+            {
+                Debug.Log("Inventory is full! Cannot add new items.");
+                return;
+            }
 
-    private void SortByName()
-    {
-        TestSorting(new SortByName());
-    }
-    private void SortByCategory()
-    {
-        TestSorting(new SortByCategory());
-    }
-    private void SortByNameLength()
-    {
-        TestSorting(new SortByNameLength());
-    }
-    private ItemData GetRandomItem(ItemData[] itemArray)
-    {
-        int randomIndex = Random.Range(0, itemArray.Length);
-        return itemArray[randomIndex];
-    }
+            var newItem = _itemFactory.CreateItem(itemData);
+            var addCommand = new AddItemCommand(InventoryManager.Instance, newItem);
+            _commandManager.ExecuteCommand(addCommand);
+        }
 
+        private void ExecuteRemoveItemCommand()
+        {
+            var itemList = InventoryManager.Instance.GetItems();
+            if (itemList.Count == 0)
+            {
+                Debug.LogWarning("Inventory is empty. Cannot remove item.");
+                return;
+            }
 
-    private void OnDestroy()
-    {
-        sortByName.onClick.RemoveListener(SortByName);
-        sortByCategory.onClick.RemoveListener(SortByCategory);
-        sortByNameLength.onClick.RemoveListener(SortByNameLength);
+            var lastItem = itemList.Last();
+            var removeCommand = new RemoveItemCommand(InventoryManager.Instance, lastItem);
+            _commandManager.ExecuteCommand(removeCommand);
+        }
+
+        private void SortByName()
+        {
+            TestSorting(new SortByName());
+        }
+
+        private void SortByCategory()
+        {
+            TestSorting(new SortByCategory());
+        }
+
+        private void SortByNameLength()
+        {
+            TestSorting(new SortByNameLength());
+        }
+
+        private void UndoLastAction()
+        {
+            _commandManager.UndoLastCommand();
+        }
+
+        private ItemData GetRandomItem(ItemData[] itemArray)
+        {
+            int randomIndex = Random.Range(0, itemArray.Length);
+            return itemArray[randomIndex];
+        }
+
+        private void TestSorting(ISortStrategy sortStrategy)
+        {
+            List<Item> sortedItems = sortStrategy.Sort(InventoryManager.Instance.GetItems());
+            InventoryManager.Instance.ReplaceItems(sortedItems);
+        }
+
+        private void OnDestroy()
+        {
+            sortByName.onClick.RemoveListener(SortByName);
+            sortByCategory.onClick.RemoveListener(SortByCategory);
+            sortByNameLength.onClick.RemoveListener(SortByNameLength);
+            undoButton.onClick.RemoveListener(UndoLastAction);
+            removeLast.onClick.RemoveListener(RemoveLastItem);
+            
+            addSword.onClick.RemoveListener(() => AddItem(swords));
+            addEat.onClick.RemoveListener(() => AddItem(eats));
+            addRing.onClick.RemoveListener(() => AddItem(rings));
+        }
     }
-}
